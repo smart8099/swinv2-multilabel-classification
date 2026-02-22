@@ -1,0 +1,53 @@
+seed: 42
+img_size: 256
+batch_size: 8
+epochs: 30
+lr: 3.0e-5
+weight_decay: 5.0e-2
+num_workers: 4
+
+task_type: multilabel
+
+model:
+  name: swinv2_tiny_window8_256
+  pretrained: true
+  drop_rate: 0.0
+  drop_path_rate: 0.1
+
+optimizer:
+  beta1: 0.9
+  beta2: 0.999
+
+training:
+  amp: true
+  max_grad_norm: 1.0
+
+multilabel:
+  threshold: 0.5
+
+early_stopping:
+  patience: 7
+  min_delta: 0.001
+
+scheduler:
+  name: cosine
+  t_max: 30
+  eta_min: 1.0e-6
+
+augmentation:
+  hflip: true
+  vflip: false
+  rotation_deg: 10
+  color_jitter:
+    brightness: 0.1
+    contrast: 0.1
+    saturation: 0.0
+    hue: 0.0
+
+normalization:
+  enabled: true
+  stats_path:
+
+# Must point to precomputed multilabel splits and labels.json from
+# scripts/prepare_synapse_classification.py --output-format multilabel
+output_dir: "./outputs_synapse_all_organs_multilabel"

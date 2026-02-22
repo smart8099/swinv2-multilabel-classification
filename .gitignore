@@ -1,0 +1,12 @@
+# Ignore all data folders
+data/
+**/data/
+outputs_synapse_all_organs_multilabel/
+.DS_Store
+venv/
+__pycache__/
+*.pyc
+*.pkl
+*.pth
+*.pt
+*.log
