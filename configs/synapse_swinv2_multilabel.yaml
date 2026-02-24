@@ -9,10 +9,18 @@ num_workers: 4
 task_type: multilabel
 
 model:
-  name: swinv2_tiny_window8_256
-  pretrained: true
+  # Strictly use ChristophReich1996/Swin-Transformer-V2 clone
+  repo_root: "../../../Swin-Transformer-V2"
+  variant: t
+  window_size: 8
+  use_checkpoint: false
+  sequential_self_attention: false
+  use_deformable_block: false
   drop_rate: 0.0
+  dropout_attention: 0.0
   drop_path_rate: 0.1
+  # Optional: backbone state dict from Christoph repo training
+  backbone_weights:
 
 optimizer:
   beta1: 0.9

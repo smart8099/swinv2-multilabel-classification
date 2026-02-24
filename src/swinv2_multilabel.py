@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from typing import Callable
 
-import timm
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -11,6 +12,57 @@ from torchvision import transforms
 import yaml
 
 from data import MultiLabelImageList
+
+
+class SwinV2ClassificationWrapper(nn.Module):
+    """Wrap SwinTransformerV2 backbone by pooling last stage feature map."""
+
+    def __init__(self, backbone: nn.Module, num_classes: int, output_channels: int) -> None:
+        super().__init__()
+        self.backbone = backbone
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.head = nn.Linear(output_channels, num_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        features = self.backbone(x)
+        return self.head(self.pool(features[-1]).flatten(start_dim=1))
+
+
+def _resolve_repo_root(model_cfg: dict) -> Path:
+    project_root = Path(__file__).resolve().parents[1]
+    default_root = Path(__file__).resolve().parents[4] / "Swin-Transformer-V2"
+    raw = model_cfg.get("repo_root", str(default_root))
+    repo_root = Path(raw).expanduser()
+    if not repo_root.is_absolute():
+        repo_root = (project_root / repo_root).resolve()
+    if not repo_root.exists():
+        raise FileNotFoundError(f"swin repo not found: {repo_root}")
+    if not (repo_root / "swin_transformer_v2").exists():
+        raise FileNotFoundError(f"missing swin_transformer_v2 package under: {repo_root}")
+    return repo_root
+
+
+def _import_swin_builders(repo_root: Path):
+    repo_root_str = str(repo_root)
+    if repo_root_str not in sys.path:
+        sys.path.insert(0, repo_root_str)
+    from swin_transformer_v2 import (
+        swin_transformer_v2_t,
+        swin_transformer_v2_s,
+        swin_transformer_v2_b,
+        swin_transformer_v2_l,
+        swin_transformer_v2_h,
+        swin_transformer_v2_g,
+    )
+
+    return {
+        "t": swin_transformer_v2_t,
+        "s": swin_transformer_v2_s,
+        "b": swin_transformer_v2_b,
+        "l": swin_transformer_v2_l,
+        "h": swin_transformer_v2_h,
+        "g": swin_transformer_v2_g,
+    }
 
 
 def load_config(path: Path) -> dict:
@@ -144,17 +196,50 @@ def build_transforms(cfg: dict, train_items):
 
 def build_model(cfg: dict, num_classes: int) -> nn.Module:
     model_cfg = cfg.get("model", {}) or {}
-    model_name = model_cfg.get("name", "swinv2_tiny_window8_256")
-    pretrained = bool(model_cfg.get("pretrained", True))
+    repo_root = _resolve_repo_root(model_cfg)
+    builders = _import_swin_builders(repo_root)
 
-    model = timm.create_model(
-        model_name,
-        pretrained=pretrained,
-        num_classes=num_classes,
-        in_chans=3,
-        drop_rate=float(model_cfg.get("drop_rate", 0.0)),
-        drop_path_rate=float(model_cfg.get("drop_path_rate", 0.1)),
+    variant = str(model_cfg.get("variant", "t")).strip().lower()
+    if variant not in builders:
+        raise ValueError("model.variant must be one of: t, s, b, l, h, g")
+    print(f"swinv2_repo_root={repo_root}")
+    print(f"swinv2_variant={variant}")
+
+    output_channels = {
+        "t": 768,
+        "s": 768,
+        "b": 1024,
+        "l": 1536,
+        "h": 2816,
+        "g": 4096,
+    }[variant]
+
+    builder: Callable = builders[variant]
+    img_size = int(cfg["img_size"])
+    backbone = builder(
+        input_resolution=(img_size, img_size),
+        in_channels=3,
+        window_size=int(model_cfg.get("window_size", 8)),
+        use_checkpoint=bool(model_cfg.get("use_checkpoint", False)),
+        sequential_self_attention=bool(model_cfg.get("sequential_self_attention", False)),
+        use_deformable_block=bool(model_cfg.get("use_deformable_block", False)),
+        dropout=float(model_cfg.get("drop_rate", 0.0)),
+        dropout_attention=float(model_cfg.get("dropout_attention", 0.0)),
+        dropout_path=float(model_cfg.get("drop_path_rate", 0.1)),
     )
+    model = SwinV2ClassificationWrapper(
+        backbone=backbone,
+        num_classes=num_classes,
+        output_channels=output_channels,
+    )
+
+    backbone_weights = str(model_cfg.get("backbone_weights", "") or "").strip()
+    if backbone_weights:
+        state = torch.load(Path(backbone_weights).expanduser(), map_location="cpu")
+        if isinstance(state, dict) and "state_dict" in state:
+            state = state["state_dict"]
+        backbone.load_state_dict(state, strict=True)
+
     return model
 
 

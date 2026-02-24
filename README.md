@@ -1,12 +1,16 @@
 # Synapse SwinV2 Multilabel Project
 
-Dedicated project directory for Synapse multilabel classification using SwinV2 (`timm`).
+Dedicated project directory for Synapse multilabel classification using
+`ChristophReich1996/Swin-Transformer-V2` directly.
 
 ## Setup
 ```bash
 cd project_directory
 python3 -m pip install -r requirements.txt
 ```
+
+Clone (or keep) the backbone repo at:
+`/Users/abdulbasit/Documents/phd_lifetime/endo_agent_project/endoagent_models/Swin-Transformer-V2`
 
 ## Prepare Synapse data and splits (inside this project)
 ```bash
