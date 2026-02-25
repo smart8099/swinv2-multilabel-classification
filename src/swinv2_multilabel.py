@@ -43,6 +43,15 @@ def _resolve_repo_root(model_cfg: dict) -> Path:
 
 
 def _import_swin_builders(repo_root: Path):
+    # Compatibility for Christoph SwinV2 code with timm>=1.0 where
+    # `timm.models.layers` moved to `timm.layers`.
+    import timm
+
+    if not hasattr(timm.models, "layers"):
+        import timm.layers as timm_layers
+
+        timm.models.layers = timm_layers
+
     repo_root_str = str(repo_root)
     if repo_root_str not in sys.path:
         sys.path.insert(0, repo_root_str)
